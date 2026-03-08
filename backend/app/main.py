@@ -5,17 +5,23 @@ from app.routes import router
 
 app = FastAPI(
     title="Devin AI Assistant API",
-    description="An AI-powered coding assistant API",
-    version="0.1.0",
+    description="Neuro-symbolic learning AI assistant",
+    version="1.0.0",
 )
 
-# Disable CORS. Do not remove this for full-stack development.
+# CORS — restrict to local Electron app and dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=[
+        "http://localhost:5173",   # Vite dev server
+        "http://localhost:4173",   # Vite preview
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:4173",
+        "app://.",                 # Electron custom protocol
+    ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(router)
@@ -23,4 +29,4 @@ app.include_router(router)
 
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok"}
+    return {"status": "ok", "engine": "neuro-symbolic", "version": "1.0.0"}

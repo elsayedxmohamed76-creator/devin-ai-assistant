@@ -39,14 +39,49 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    model: str = "gpt-4"
-    temperature: float = 0.1
+
+
+class ChatResponse(BaseModel):
+    conversation_id: str
+    message: ChatMessage
+    tools_used: list[str] = Field(default_factory=list)
+    plan: Optional[list[dict[str, str]]] = None
+    learning_info: dict[str, Any] = Field(default_factory=dict)
+
+
+class RewardRequest(BaseModel):
+    """User reward signal for the learning engine."""
+    value: int = Field(..., ge=-1, le=1, description="Reward: +1 (correct), 0 (neutral), -1 (wrong)")
+
+
+class RewardResponse(BaseModel):
+    """Response after processing a reward."""
+    learned: bool = False
+    message: str = ""
+    state: str = ""
+    action: str = ""
+    reward: int = 0
+    new_epsilon: float = 0.0
+    rule: Optional[dict[str, str]] = None
+
+
+class MemoryStats(BaseModel):
+    """Current memory and learning statistics."""
+    rules_learned: int = 0
+    vocabulary_size: int = 0
+    facts_known: int = 0
+    total_interactions: int = 0
+    q_table_entries: int = 0
+    average_reward: float = 0.0
+    exploration_rate: float = 0.0
+    stm_size: int = 0
+    last_source: str = ""
+    db_path: str = ""
 
 
 class ToolExecuteRequest(BaseModel):
     tool_name: str
     parameters: dict[str, Any] = Field(default_factory=dict)
-    workspace: str = "."
 
 
 class TaskCreateRequest(BaseModel):
@@ -57,13 +92,6 @@ class TaskCreateRequest(BaseModel):
 class TaskUpdateRequest(BaseModel):
     status: TaskStatus
     result: str = ""
-
-
-class ChatResponse(BaseModel):
-    conversation_id: str
-    message: ChatMessage
-    tools_used: list[str] = Field(default_factory=list)
-    plan: Optional[list[dict[str, str]]] = None
 
 
 class ToolInfo(BaseModel):
@@ -97,8 +125,8 @@ class ConversationInfo(BaseModel):
 
 class AgentInfo(BaseModel):
     name: str = "Devin AI Assistant"
-    version: str = "0.1.0"
-    model: str = "gpt-4"
+    version: str = "1.1.0"
+    model: str = "TinyLlama 1.1B Local + Neuro-Symbolic 1.0"
     tools: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=lambda: [
         "code_reading",
@@ -108,4 +136,8 @@ class AgentInfo(BaseModel):
         "code_search",
         "task_planning",
         "conversation_memory",
+        "continuous_learning",
+        "pattern_recognition",
+        "symbolic_consolidation",
+        "local_llm",
     ])

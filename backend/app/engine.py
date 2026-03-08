@@ -1,11 +1,18 @@
-"""AI Assistant engine - manages conversations, tools, and task planning."""
+"""AI Assistant engine — integrates the neuro-symbolic learning system.
+
+This is the main orchestrator that connects the learning engine,
+memory system, tools, and conversation management.
+"""
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
-from typing import Any
+from typing import Any, Optional
 
+from app.learner import NeuroSymbolicEngine
+from app.memory import LongTermMemory, ShortTermMemory
 from app.models import (
     ChatMessage,
     MessageRole,
@@ -15,7 +22,12 @@ from app.models import (
     ToolResult,
     ToolStatus,
 )
+from app.tools_real import TOOL_REGISTRY, execute_tool, get_all_tools
 
+
+# ---------------------------------------------------------------------------
+# Conversation
+# ---------------------------------------------------------------------------
 
 class Conversation:
     def __init__(self, conversation_id: str | None = None) -> None:
@@ -41,69 +53,9 @@ class Conversation:
         return ""
 
 
-class ToolRegistry:
-    def __init__(self) -> None:
-        self._tools: dict[str, ToolInfo] = {}
-        self._register_defaults()
-
-    def _register_defaults(self) -> None:
-        defaults = [
-            ToolInfo(
-                name="read_file",
-                description="Read the contents of a file in the workspace",
-                parameters={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-            ),
-            ToolInfo(
-                name="write_file",
-                description="Write content to a file, creating directories as needed",
-                parameters={"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]},
-            ),
-            ToolInfo(
-                name="run_shell",
-                description="Execute a shell command in the workspace",
-                parameters={"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]},
-            ),
-            ToolInfo(
-                name="search_code",
-                description="Search for patterns in code files using regex",
-                parameters={"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]},
-            ),
-            ToolInfo(
-                name="list_files",
-                description="List files in a directory with optional glob filtering",
-                parameters={"type": "object", "properties": {"path": {"type": "string"}, "pattern": {"type": "string"}}},
-            ),
-            ToolInfo(
-                name="web_search",
-                description="Search the web for documentation, APIs, or technical topics",
-                parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-            ),
-        ]
-        for tool in defaults:
-            self._tools[tool.name] = tool
-
-    def get_all(self) -> list[ToolInfo]:
-        return list(self._tools.values())
-
-    def get(self, name: str) -> ToolInfo | None:
-        return self._tools.get(name)
-
-    def execute(self, name: str, parameters: dict[str, Any]) -> ToolResult:
-        tool = self._tools.get(name)
-        if not tool:
-            return ToolResult(status=ToolStatus.ERROR, error=f"Unknown tool: {name}", tool_name=name)
-
-        simulations: dict[str, str] = {
-            "read_file": f"[Demo] Contents of '{parameters.get('path', 'file.txt')}':\n# File contents would appear here",
-            "write_file": f"[Demo] Successfully wrote to '{parameters.get('path', 'file.txt')}'",
-            "run_shell": f"[Demo] $ {parameters.get('command', 'echo hello')}\nCommand executed successfully",
-            "search_code": f"[Demo] Found 3 matches for '{parameters.get('pattern', '')}'",
-            "list_files": "[Demo] Files:\n  src/main.py\n  src/utils.py\n  README.md",
-            "web_search": f"[Demo] Search results for '{parameters.get('query', '')}'",
-        }
-        output = simulations.get(name, f"[Demo] Tool '{name}' executed successfully")
-        return ToolResult(status=ToolStatus.SUCCESS, output=output, tool_name=name)
-
+# ---------------------------------------------------------------------------
+# Task Planner
+# ---------------------------------------------------------------------------
 
 class TaskPlanner:
     def __init__(self) -> None:
@@ -133,11 +85,88 @@ class TaskPlanner:
         self._tasks.clear()
 
 
+# ---------------------------------------------------------------------------
+# Tool detection — parse user messages for tool invocations
+# ---------------------------------------------------------------------------
+
+_TOOL_PATTERNS: dict[str, list[str]] = {
+    "read_file": ["leggi", "read", "open", "apri", "mostra", "show", "view", "vedi"],
+    "write_file": ["scrivi", "write", "crea", "create", "salva", "save"],
+    "run_shell": ["esegui", "run", "lancia", "execute", "comando", "command", "terminal"],
+    "search_code": ["cerca", "search", "find", "trova", "grep"],
+    "list_files": ["lista", "list", "elenca", "files", "directory", "cartella"],
+    "web_search": ["wikipedia", "web", "internet", "cerca online"],
+}
+
+
+def _detect_tool_intent(message: str) -> tuple[str | None, dict[str, Any]]:
+    """Detect if the user is requesting a tool operation."""
+    msg_lower = message.lower()
+
+    for tool_name, keywords in _TOOL_PATTERNS.items():
+        for kw in keywords:
+            if kw in msg_lower:
+                params = _extract_tool_params(tool_name, message)
+                if params:
+                    return tool_name, params
+    return None, {}
+
+
+def _extract_tool_params(tool_name: str, message: str) -> dict[str, Any]:
+    """Try to extract parameters from natural language."""
+    # Look for file paths (quoted or with common extensions)
+    path_match = re.search(r'["\']([^"\']+)["\']', message)
+    if not path_match:
+        path_match = re.search(r'(\S+\.\w{1,5})', message)
+
+    if tool_name in ("read_file", "write_file", "list_files"):
+        path = path_match.group(1) if path_match else None
+        if path:
+            params: dict[str, Any] = {"path": path}
+            if tool_name == "write_file":
+                # Try to extract content after ":" or "content:"
+                content_match = re.search(r'(?:content|contenuto|testo)[:\s]+(.+)', message, re.DOTALL | re.IGNORECASE)
+                params["content"] = content_match.group(1).strip() if content_match else ""
+            return params
+
+    if tool_name == "run_shell":
+        # Look for command in backticks or after "command:"
+        cmd_match = re.search(r'`([^`]+)`', message)
+        if not cmd_match:
+            cmd_match = re.search(r'(?:command|comando|esegui)[:\s]+(.+)', message, re.IGNORECASE)
+        if cmd_match:
+            return {"command": cmd_match.group(1).strip()}
+
+    if tool_name == "search_code":
+        query_match = re.search(r'(?:for|per|pattern)[:\s]+["\']?([^"\']+)["\']?', message, re.IGNORECASE)
+        if not query_match:
+            query_match = re.search(r'["\']([^"\']+)["\']', message)
+        if query_match:
+            return {"pattern": query_match.group(1).strip()}
+
+    if tool_name == "web_search":
+        query_match = re.search(r'(?:about|su|per|search|cerca)[:\s]+(.+)', message, re.IGNORECASE)
+        if query_match:
+            return {"query": query_match.group(1).strip()}
+
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Assistant Engine — main controller
+# ---------------------------------------------------------------------------
+
 class AssistantEngine:
+    """Main engine integrating conversations, tools, and neuro-symbolic learning."""
+
     def __init__(self) -> None:
         self.conversations: dict[str, Conversation] = {}
-        self.tools = ToolRegistry()
         self.planner = TaskPlanner()
+
+        # Initialize the learning brain
+        self.ltm = LongTermMemory()
+        self.stm = ShortTermMemory(max_size=30)
+        self.brain = NeuroSymbolicEngine(self.ltm, self.stm)
 
     def get_or_create_conversation(self, conversation_id: str | None = None) -> Conversation:
         if conversation_id and conversation_id in self.conversations:
@@ -146,99 +175,67 @@ class AssistantEngine:
         self.conversations[conv.id] = conv
         return conv
 
-    def process_message(self, message: str, conversation_id: str | None = None) -> tuple[Conversation, ChatMessage, list[str]]:
+    def process_message(
+        self, message: str, conversation_id: str | None = None
+    ) -> tuple[Conversation, ChatMessage, list[str], dict[str, Any]]:
+        """Process a user message through the learning engine.
+
+        Returns: (conversation, assistant_message, tools_used, learning_info)
+        """
         conv = self.get_or_create_conversation(conversation_id)
         conv.add_message(MessageRole.USER, message)
-        response_text, tools_used = self._generate_response(message)
-        assistant_msg = conv.add_message(MessageRole.ASSISTANT, response_text)
-        return conv, assistant_msg, tools_used
 
-    def _generate_response(self, message: str) -> tuple[str, list[str]]:
-        msg_lower = message.lower()
         tools_used: list[str] = []
+        learning_info: dict[str, Any] = {}
 
-        if any(word in msg_lower for word in ["hello", "hi", "hey", "ciao", "salve"]):
-            return (
-                "Hello! I'm Devin, your AI coding assistant. I can help you with:\n\n"
-                "- **Reading & writing code** - I can navigate and edit your codebase\n"
-                "- **Running commands** - Execute shell commands, tests, builds\n"
-                "- **Searching code** - Find patterns and references across files\n"
-                "- **Planning tasks** - Break down complex tasks into steps\n\n"
-                "What would you like to work on today?",
-                [],
-            )
+        # --- Step 1: Check for tool invocation ---
+        tool_name, tool_params = _detect_tool_intent(message)
+        tool_output = ""
+        if tool_name and tool_params:
+            result = execute_tool(tool_name, tool_params)
+            tools_used.append(tool_name)
+            if result.status == ToolStatus.SUCCESS:
+                tool_output = f"\n\n**🔧 Tool `{tool_name}`:**\n```\n{result.output[:2000]}\n```"
+            else:
+                tool_output = f"\n\n**❌ Tool `{tool_name}` error:** {result.error}"
 
-        if any(word in msg_lower for word in ["read", "open", "show", "view", "file"]):
-            tools_used.append("read_file")
-            return (
-                "I'll read that file for you. Here's what I found:\n\n"
-                "```python\ndef main():\n    print('Hello from Devin!')\n    return 0\n```\n\n"
-                "Would you like me to make any changes?",
-                tools_used,
-            )
+        # --- Step 2: Generate response through the learning engine ---
+        brain_result = self.brain.process(message)
+        response_text = brain_result["response"]
+        learning_info = {
+            "source": brain_result["source"],
+            "confidence": brain_result["confidence"],
+            "learning_info": brain_result.get("learning_info", ""),
+            "state": brain_result.get("state", ""),
+        }
+        tools_used.extend(brain_result.get("tools_used", []))
 
-        if any(word in msg_lower for word in ["write", "create", "edit", "modify"]):
-            tools_used.append("write_file")
-            return (
-                "I've made the changes you requested:\n\n"
-                "1. Created/modified the file with the new content\n"
-                "2. Ensured proper formatting and imports\n\n"
-                "Would you like me to run any tests to verify?",
-                tools_used,
-            )
+        # Append tool output if any
+        if tool_output:
+            response_text += tool_output
 
-        if any(word in msg_lower for word in ["run", "execute", "test", "build", "lint"]):
-            tools_used.append("run_shell")
-            return (
-                "Command executed successfully:\n\n"
-                "```\n$ command executed\nAll checks passed!\n```\n\n"
-                "Everything looks good!",
-                tools_used,
-            )
+        # --- Step 3: Log interaction ---
+        self.ltm.log_interaction(message, response_text, tools_used=tools_used)
 
-        if any(word in msg_lower for word in ["search", "find", "grep", "where"]):
-            tools_used.append("search_code")
-            return (
-                "Found several matches:\n\n"
-                "- `src/main.py:10` - Primary definition\n"
-                "- `src/utils.py:25` - Utility usage\n"
-                "- `tests/test_main.py:5` - Test reference\n\n"
-                "Would you like me to open any of these files?",
-                tools_used,
-            )
+        assistant_msg = conv.add_message(MessageRole.ASSISTANT, response_text)
+        return conv, assistant_msg, tools_used, learning_info
 
-        if any(word in msg_lower for word in ["plan", "task", "step", "break"]):
-            return (
-                "Here's my plan:\n\n"
-                "1. **Analyze** - Understand requirements\n"
-                "2. **Plan** - Design the solution\n"
-                "3. **Implement** - Write the code\n"
-                "4. **Test** - Verify everything works\n"
-                "5. **Review** - Final cleanup\n\n"
-                "Shall I proceed?",
-                [],
-            )
+    def reward(self, value: int) -> dict[str, Any]:
+        """Send a reward signal to the learning engine."""
+        return self.brain.reward(value)
 
-        if any(word in msg_lower for word in ["help", "what", "how", "can you"]):
-            return (
-                "I'm Devin, an AI coding assistant. I can:\n\n"
-                "- Read, write, and edit code files\n"
-                "- Run shell commands and tests\n"
-                "- Search across your codebase\n"
-                "- Plan and track complex tasks\n"
-                "- Debug errors and suggest fixes\n\n"
-                "Just tell me what you need!",
-                [],
-            )
+    def get_memory_stats(self) -> dict[str, Any]:
+        """Get memory and learning statistics."""
+        return self.brain.get_learning_state()
 
-        return (
-            "I understand your request. Let me work on it.\n\n"
-            "1. I'll examine the relevant code and context\n"
-            "2. Implement the necessary changes\n"
-            "3. Verify everything works correctly\n\n"
-            "Would you like me to proceed?",
-            [],
-        )
+    def get_all_rules(self) -> list[dict[str, Any]]:
+        """Get all consolidated rules."""
+        return self.ltm.get_all_rules()
+
+    def get_vocabulary(self) -> list[dict[str, Any]]:
+        """Get known vocabulary."""
+        return self.ltm.get_vocabulary()
 
 
+# Singleton engine instance
 engine = AssistantEngine()

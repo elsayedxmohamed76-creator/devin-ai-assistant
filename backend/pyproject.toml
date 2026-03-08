@@ -1,17 +1,23 @@
 [tool.poetry]
-name = "app"
-version = "0.1.0"
-description = ""
-authors = ["Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>"]
+name = "devin-ai-assistant"
+version = "1.0.0"
+description = "AI-powered coding assistant with neuro-symbolic learning engine"
+authors = ["Mohamed <elsayedxmohamed76@users.noreply.github.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
 fastapi = {extras = ["standard"], version = "^0.135.1"}
-psycopg = {extras = ["binary"], version = "^3.3.3"}
 httpx = "^0.28.1"
 pydantic-settings = "^2.13.1"
+wikipedia-api = "^0.7.1"
+networkx = ">=3.0"
+llama-cpp-python = ">=0.2.56"
+huggingface-hub = ">=0.20.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.24"
 
 [build-system]
 requires = ["poetry-core"]

@@ -3,36 +3,41 @@ import { useChat } from "./hooks/useChat";
 import ChatMessageComponent from "./components/chat/ChatMessage";
 import ChatInput from "./components/chat/ChatInput";
 import ToolBadge from "./components/chat/ToolBadge";
+import RewardButtons from "./components/chat/RewardButtons";
 import Sidebar from "./components/chat/Sidebar";
 import ToolsPanel from "./components/chat/ToolsPanel";
 import InfoPanel from "./components/chat/InfoPanel";
-import { Bot, Zap, Code, Terminal, Search, ListTodo, Menu, X } from "lucide-react";
+import MemoryPanel from "./components/MemoryPanel";
+import { Bot, Code, Terminal, Search, ListTodo, Brain } from "lucide-react";
 
 function WelcomeScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6">
-      <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-500/25 animate-pulse">
-        <Zap className="w-10 h-10 text-white" />
+      <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-500/25 animate-pulse">
+        <Brain className="w-10 h-10 text-white" />
       </div>
       <h2 className="text-3xl font-bold text-white mb-2">
-        Welcome to Devin AI
+        Devin AI Assistant
       </h2>
-      <p className="text-gray-400 mb-8 max-w-md">
-        Your AI-powered coding assistant. I can help you read, write, and debug
-        code, run commands, and plan complex tasks.
+      <p className="text-gray-400 mb-2 text-sm">
+        🧠 Motore Neuro-Simbolico • Impara da te
+      </p>
+      <p className="text-gray-500 mb-8 max-w-md text-sm">
+        Sono un'IA che impara dalle tue interazioni. Più mi insegni con 👍 e 👎, più divento intelligente.
+        Non dimentico mai quello che imparo!
       </p>
       <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
         {[
-          { icon: <Code className="w-5 h-5" />, label: "Read & Write Code", desc: "Navigate and edit files" },
-          { icon: <Terminal className="w-5 h-5" />, label: "Run Commands", desc: "Execute shell commands" },
-          { icon: <Search className="w-5 h-5" />, label: "Search Code", desc: "Find patterns in files" },
-          { icon: <ListTodo className="w-5 h-5" />, label: "Plan Tasks", desc: "Break down complex work" },
+          { icon: <Code className="w-5 h-5" />, label: "Leggi & Scrivi Codice", desc: "File reali sul tuo PC" },
+          { icon: <Terminal className="w-5 h-5" />, label: "Esegui Comandi", desc: "PowerShell integrato" },
+          { icon: <Search className="w-5 h-5" />, label: "Cerca nel Codice", desc: "Regex across files" },
+          { icon: <ListTodo className="w-5 h-5" />, label: "Impara & Ricorda", desc: "Memoria permanente" },
         ].map((item) => (
           <div
             key={item.label}
-            className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 text-left hover:border-cyan-500/30 transition-colors"
+            className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 text-left hover:border-purple-500/30 transition-colors"
           >
-            <div className="text-cyan-400 mb-2">{item.icon}</div>
+            <div className="text-purple-400 mb-2">{item.icon}</div>
             <h3 className="text-sm font-semibold text-white">{item.label}</h3>
             <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
           </div>
@@ -43,9 +48,8 @@ function WelcomeScreen() {
 }
 
 function App() {
-  const { messages, isLoading, error, send, clear, toolsUsed } = useChat();
+  const { messages, isLoading, error, send, clear, toolsUsed, learningInfo, reward } = useChat();
   const [activePanel, setActivePanel] = useState("chat");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,51 +61,40 @@ function App() {
     setActivePanel("chat");
   };
 
+  const panelTitles: Record<string, string> = {
+    chat: "Chat",
+    tools: "Strumenti",
+    info: "Info",
+    memory: "Cervello",
+  };
+
   return (
     <div className="h-screen flex bg-gray-950 text-white overflow-hidden">
-      {/* Mobile menu toggle */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-gray-800 p-2 rounded-lg border border-gray-700"
-      >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
-
       {/* Sidebar */}
-      <div
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0 fixed lg:relative z-40 transition-transform duration-200`}
-      >
+      <div className="flex-shrink-0 z-40 bg-gray-900 border-r border-gray-800">
         <Sidebar
           onNewChat={handleNewChat}
           onShowTools={() => setActivePanel("tools")}
           onShowInfo={() => setActivePanel("info")}
+          onShowMemory={() => setActivePanel("memory")}
           activePanel={activePanel}
         />
       </div>
-
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-30"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header className="border-b border-gray-700 bg-gray-900/80 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3 ml-10 lg:ml-0">
-            <Bot className="w-5 h-5 text-cyan-400" />
+            <Bot className="w-5 h-5 text-purple-400" />
             <h1 className="text-lg font-semibold text-white">
-              {activePanel === "chat"
-                ? "Chat"
-                : activePanel === "tools"
-                ? "Tools"
-                : "About"}
+              {panelTitles[activePanel] || "Chat"}
             </h1>
+            {learningInfo && activePanel === "chat" && (
+              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
+                {learningInfo.learning_info}
+              </span>
+            )}
           </div>
           {activePanel === "chat" && messages.length > 0 && (
             <button
@@ -122,19 +115,25 @@ function App() {
               ) : (
                 <div className="max-w-4xl mx-auto">
                   {messages.map((msg, i) => (
-                    <ChatMessageComponent key={i} message={msg} />
+                    <div key={i}>
+                      <ChatMessageComponent message={msg} />
+                      {/* Show reward buttons after each AI response */}
+                      {msg.role === "assistant" && i === messages.length - 1 && (
+                        <RewardButtons onReward={reward} disabled={isLoading} />
+                      )}
+                    </div>
                   ))}
                   {toolsUsed.length > 0 && <ToolBadge tools={toolsUsed} />}
                   {isLoading && (
                     <div className="flex gap-3 mb-4 animate-pulse">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                         <Bot className="w-4 h-4 text-white" />
                       </div>
                       <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3">
                         <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                          <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                         </div>
                       </div>
                     </div>
@@ -153,6 +152,10 @@ function App() {
         ) : activePanel === "tools" ? (
           <div className="flex-1 overflow-y-auto">
             <ToolsPanel />
+          </div>
+        ) : activePanel === "memory" ? (
+          <div className="flex-1 overflow-y-auto">
+            <MemoryPanel />
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">

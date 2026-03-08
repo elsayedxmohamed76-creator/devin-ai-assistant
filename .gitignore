@@ -46,3 +46,13 @@ htmlcov/
 # Mobile
 ios/
 android/
+
+# Devin Specific
+backend/models/
+backend/data/
+frontend/release/
+frontend/dist/
+backend/build/
+backend/dist/
+*.exe
+

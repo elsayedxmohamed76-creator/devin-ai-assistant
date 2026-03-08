@@ -1,0 +1,41 @@
+appId: com.devinai.assistant
+productName: Devin AI Assistant
+copyright: Copyright © 2025
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+
+extraResources:
+  - from: ../backend/dist/devin-backend.exe
+    to: backend/devin-backend.exe
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: public/icon.ico
+  artifactName: DevinAI-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Devin AI Assistant
+  runAfterFinish: true
+  installerIcon: public/icon.ico
+  uninstallerIcon: public/icon.ico
+  installerHeaderIcon: public/icon.ico
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: elsayedxmohamed76-creator
+  repo: devin-ai-assistant
